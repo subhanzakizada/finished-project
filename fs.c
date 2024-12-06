@@ -86,13 +86,33 @@ i32 fsOpen(str fname) {
 // read (may be less than 'numb' if we hit EOF).  On failure, abort
 // ============================================================================
 i32 fsRead(i32 fd, i32 numb, void* buf) {
+    // Validate file descriptor and get inode number
+    i32 inum = bfsFdToInum(fd);
+    if (inum < 0) FATAL(EBADINUM); // Invalid inode number
 
-  // ++++++++++++++++++++++++
-  // Insert your code here
-  // ++++++++++++++++++++++++
+    // Validate Open File Table entry
+    i32 ofte = bfsFindOFTE(inum);
+    if (ofte < 0) FATAL(EOFTFULL); // Open File Table full or invalid OFTE entry
 
-  FATAL(ENYI);                                  // Not Yet Implemented!
-  return 0;
+    // Get cursor position and file size
+    i32 cursor = g_oft[ofte].curs;
+    i32 fileSize = bfsGetSize(inum);
+    printf("fsRead: fileSize = %d, cursor = %d\n", fileSize, cursor);
+
+    if (cursor >= fileSize) return 0; // EOF reached
+
+    // Calculate the number of bytes to read
+    i32 bytesToRead = (cursor + numb > fileSize) ? fileSize - cursor : numb;
+    printf("fsRead: bytesToRead = %d\n", bytesToRead);
+
+    // Read data block-by-block
+    i32 bytesRead = bfsRead(inum, cursor / BYTESPERBLOCK, buf);
+    if (bytesRead < 0) FATAL(EBADREAD); // Error reading from BFS disk
+    printf("fsRead: bytesRead = %d\n", bytesRead);
+
+    // Update cursor position and return bytes read
+    bfsSetCursor(inum, cursor + bytesRead);
+    return bytesRead;
 }
 
 
@@ -160,11 +180,56 @@ i32 fsSize(i32 fd) {
 // destination file.  On success, return 0.  On failure, abort
 // ============================================================================
 i32 fsWrite(i32 fd, i32 numb, void* buf) {
+    // Validate file descriptor and get inode number
+    i32 inum = bfsFdToInum(fd);
+    if (inum < 0) FATAL(EBADINUM); // Invalid inode number
 
-  // ++++++++++++++++++++++++
-  // Insert your code here
-  // ++++++++++++++++++++++++
+    // Validate Open File Table entry
+    i32 ofte = bfsFindOFTE(inum);
+    if (ofte < 0) FATAL(EOFTFULL); // Open File Table full or invalid OFTE entry
 
-  FATAL(ENYI);                                  // Not Yet Implemented!
-  return 0;
+    // Get the current cursor position
+    i32 cursor = bfsTell(fd);
+
+    // Write data block-by-block
+    i32 bytesWritten = 0;
+    while (bytesWritten < numb) {
+        i32 fbn = cursor / BYTESPERBLOCK;          // File block number
+        i32 offset = cursor % BYTESPERBLOCK;       // Offset within the block
+        i32 toWrite = BYTESPERBLOCK - offset;      // Bytes to write in the current block
+
+        if (toWrite > (numb - bytesWritten)) {
+            toWrite = numb - bytesWritten;         // Adjust for remaining bytes
+        }
+
+        // Allocate a block if necessary
+        i32 dbn = bfsFbnToDbn(inum, fbn);
+        if (dbn < 0) {
+            dbn = bfsAllocBlock(inum, fbn);
+            if (dbn < 0) FATAL(EDISKFULL); // No free disk space
+        }
+
+        // Buffer for the block
+        char block[BYTESPERBLOCK];
+        memset(block, 0, BYTESPERBLOCK);          // Zero out the block
+        bioRead(dbn, block);                      // Read the existing block
+
+        // Copy data into the block
+        memcpy(block + offset, buf + bytesWritten, toWrite);
+
+        // Write the block back to the disk
+        bioWrite(dbn, block);
+
+        // Update counters and cursor
+        bytesWritten += toWrite;
+        cursor += toWrite;
+    }
+
+    // Update cursor and file size
+    bfsSetCursor(inum, cursor);
+    if (cursor > bfsGetSize(inum)) bfsSetSize(inum, cursor);
+
+    return bytesWritten;
 }
+
+
