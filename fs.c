@@ -94,8 +94,8 @@ i32 fsRead(i32 fd, i32 numb, void* buf) {
     i32 ofte = bfsFindOFTE(inum);
     if (ofte < 0) FATAL(EOFTFULL); // Open File Table full or invalid OFTE entry
 
-    // Get cursor position and file size
-    i32 cursor = g_oft[ofte].curs;
+    // Get cursor position using bfsTell and file size
+    i32 cursor = bfsTell(fd);
     i32 fileSize = bfsGetSize(inum);
     printf("fsRead: fileSize = %d, cursor = %d\n", fileSize, cursor);
 
@@ -106,14 +106,41 @@ i32 fsRead(i32 fd, i32 numb, void* buf) {
     printf("fsRead: bytesToRead = %d\n", bytesToRead);
 
     // Read data block-by-block
-    i32 bytesRead = bfsRead(inum, cursor / BYTESPERBLOCK, buf);
-    if (bytesRead < 0) FATAL(EBADREAD); // Error reading from BFS disk
-    printf("fsRead: bytesRead = %d\n", bytesRead);
+    i32 bytesRead = 0;
+    i32 remainingBytes = bytesToRead;
+
+    while (remainingBytes > 0) {
+        i32 fbn = cursor / BYTESPERBLOCK;           // File block number
+        i32 offset = cursor % BYTESPERBLOCK;       // Offset within the block
+        i32 toRead = BYTESPERBLOCK - offset;       // Bytes to read in the current block
+
+        if (toRead > remainingBytes) {
+            toRead = remainingBytes;               // Adjust for remaining bytes
+        }
+
+        // Get the disk block number
+        i32 dbn = bfsFbnToDbn(inum, fbn);
+        if (dbn < 0) FATAL(EBADREAD); // Invalid block
+
+        // Buffer for the block
+        char block[BYTESPERBLOCK];
+        memset(block, 0, BYTESPERBLOCK);
+        bioRead(dbn, block);                      // Read the block from disk
+
+        // Copy data to the user buffer
+        memcpy(buf + bytesRead, block + offset, toRead);
+
+        // Update counters
+        bytesRead += toRead;
+        cursor += toRead;
+        remainingBytes -= toRead;
+    }
 
     // Update cursor position and return bytes read
-    bfsSetCursor(inum, cursor + bytesRead);
+    bfsSetCursor(inum, cursor);
     return bytesRead;
 }
+
 
 
 // ============================================================================
