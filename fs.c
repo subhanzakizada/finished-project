@@ -97,20 +97,20 @@ i32 fsRead(i32 fd, i32 numb, void* buf) {
     // Get cursor position using bfsTell and file size
     i32 cursor = bfsTell(fd);
     i32 fileSize = bfsGetSize(inum);
-    printf("fsRead: fileSize = %d, cursor = %d\n", fileSize, cursor);
+    // printf("fsRead: fileSize = %d, cursor = %d\n", fileSize, cursor);
 
     if (cursor >= fileSize) return 0; // EOF reached
 
     // Calculate the number of bytes to read
     i32 bytesToRead = (cursor + numb > fileSize) ? fileSize - cursor : numb;
-    printf("fsRead: bytesToRead = %d\n", bytesToRead);
+    // printf("fsRead: bytesToRead = %d\n", bytesToRead);
 
     // Read data block-by-block
     i32 bytesRead = 0;
     i32 remainingBytes = bytesToRead;
 
     while (remainingBytes > 0) {
-        i32 fbn = cursor / BYTESPERBLOCK;           // File block number
+        i32 fbn = cursor / BYTESPERBLOCK;          // File block number
         i32 offset = cursor % BYTESPERBLOCK;       // Offset within the block
         i32 toRead = BYTESPERBLOCK - offset;       // Bytes to read in the current block
 

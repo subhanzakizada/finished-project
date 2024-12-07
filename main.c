@@ -5,7 +5,7 @@
 #include "p5test.h"
 
 int main() {
-  bfsInitOFT();
+  // bfsInitOFT();
   p5test();
   return 0;
 }
